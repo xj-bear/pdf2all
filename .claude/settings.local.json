@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm install)",
+      "Bash(npm run build)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(where:*)",
+      "Bash(java:*)",
+      "Bash(node:*)",
+      "mcp__mcp-router__pdf_to_ppt",
+      "mcp__mcp-router__pdf_to_jpg",
+      "mcp__mcp-router__pdf_to_docx",
+      "mcp__mcp-router__pdf_to_excel",
+      "mcp__mcp-router__resolve-library-id",
+      "mcp__mcp-router__get-library-docs"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

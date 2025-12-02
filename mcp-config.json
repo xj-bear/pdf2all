@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pdf2all": {
+      "command": "node",
+      "args": [
+        "G:\\project\\阿里mcp大赛\\pdf2all\\dist\\index.js"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
