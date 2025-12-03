@@ -277,11 +277,75 @@ async function prepareInputFile(
   pdfBase64?: string
 ): Promise<{ path: string; isTemp: boolean }> {
   if (pdfPath) {
+    // Remove surrounding quotes if present (common when copying paths)
+    pdfPath = pdfPath.replace(/^['"]|['"]$/g, "");
+
+    // If absolute path, verify existence
+    if (path.isAbsolute(pdfPath)) {
+      if (fs.existsSync(pdfPath)) {
+        return { path: pdfPath, isTemp: false };
+      }
+      // If absolute path doesn't exist, try to treat basename as relative?
+      // No, absolute path should be respected. But maybe user made a mistake.
+    }
+
+    // Try to resolve relative path in common locations
+    const searchPaths = [
+      process.cwd(),
+      path.join(process.cwd(), "test"), // Add test directory
+      path.join(process.cwd(), "uploads"),
+      path.join(process.cwd(), "files"),
+      path.join(os.homedir(), "Downloads"),
+      path.join(os.homedir(), "Documents"),
+      path.join(os.homedir(), "Desktop"),
+      os.tmpdir(), // Add system temp directory
+      // Also check relative to the script for backward compatibility
+      path.join(__dirname, "..", ".."),
+      path.join(__dirname, "..", "..", "test"),
+      path.join(__dirname, "..", "..", "uploads"),
+    ];
+
+    // Check exact match first (relative to CWD)
+    if (fs.existsSync(pdfPath)) {
+      return { path: path.resolve(pdfPath), isTemp: false };
+    }
+
+    console.error(`DEBUG: Searching for ${pdfPath} in:`, searchPaths);
+
+    const basename = path.basename(pdfPath);
+    for (const searchDir of searchPaths) {
+      const candidate = path.join(searchDir, basename);
+      if (fs.existsSync(candidate)) {
+        console.log(`Found file at: ${candidate}`);
+        return { path: candidate, isTemp: false };
+      }
+    }
+
+    // If still not found, return original path and let Python script handle error (or fail here)
+    // But failing here is better for clarity
+    // Let's return the original path so the error message "File not found: ..." comes from Python or here.
+    // Actually, throwing here is better for immediate feedback.
+    // But to maintain behavior, let's return it.
     return { path: pdfPath, isTemp: false };
   }
 
   if (pdfUrl) {
-    const fileName = `${uuidv4()}.pdf`;
+    // Try to extract filename from URL
+    let originalName = "document.pdf";
+    try {
+      const urlObj = new URL(pdfUrl);
+      const pathname = urlObj.pathname;
+      const basename = path.basename(pathname);
+      if (basename && basename.toLowerCase().endsWith(".pdf")) {
+        originalName = basename;
+      }
+    } catch (e) { }
+
+    // Sanitize filename: remove invalid characters for Windows/Linux
+    // Invalid chars: < > : " / \ | ? *
+    originalName = originalName.replace(/[<>:"/\\|?*]/g, "_");
+
+    const fileName = `${uuidv4()}-${originalName}`;
     const tempPath = path.join(TEMP_DIR, fileName);
     const response = await fetch(pdfUrl);
     if (!response.ok) {
@@ -368,12 +432,21 @@ async function handleOutput(
       // For local inputs, save Zip to disk
       const firstFile = paths[0];
       const outputDir = path.dirname(firstFile);
-      const basename = path.basename(firstFile).replace(/_page_\d+\.jpg$/, "");
+      // Use path.parse to safely get filename without extension
+      const parsed = path.parse(firstFile);
+      // Remove _1, _2 suffix
+      const basename = parsed.name.replace(/_\d+$/, "");
       const zipPath = path.join(outputDir, `${basename}.zip`);
 
       try {
         zip.writeZip(zipPath);
         message += `\n\nOutput Zip: ${zipPath}`;
+
+        // Delete individual files to save space
+        for (const p of paths) {
+          try { fs.unlinkSync(p); } catch (e) { console.error("Failed to delete file:", e); }
+        }
+        message += `\n(Individual images deleted to save space)`;
       } catch (e: any) {
         console.error("Failed to create zip:", e);
         message += `\n\nError creating Zip: ${e.message}`;
@@ -539,7 +612,10 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
           // For pdf_to_jpg, list output files
           if (name === "pdf_to_jpg" && result.output_paths) {
             const paths = result.output_paths as string[];
-            content[0].text += `\n\nOutput files:\n${paths.map((p) => `- ${p}`).join("\n")}`;
+            const existingPaths = paths.filter(p => fs.existsSync(p));
+            if (existingPaths.length > 0) {
+              content[0].text += `\n\nOutput files:\n${existingPaths.map((p) => `- ${p}`).join("\n")}`;
+            }
 
             if (baseUrl && publicDir) {
               paths.forEach(p => {

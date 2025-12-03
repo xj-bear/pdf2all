@@ -19,7 +19,9 @@
       "mcp__mcp-router__get-library-docs",
       "Skill(pdf)",
       "Skill(pdf2img)",
-      "WebFetch(domain:img.gpt.edu.bi)"
+      "WebFetch(domain:img.gpt.edu.bi)",
+      "Bash(curl:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

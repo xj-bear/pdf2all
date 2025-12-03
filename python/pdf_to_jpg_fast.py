@@ -44,11 +44,11 @@ def convert(pdf_path: str, output_path: str | None = None, dpi: int = 72, qualit
         if not output_path:
             base_name = os.path.splitext(pdf_path)[0]
             output_dir = os.path.dirname(pdf_path)
-            output_pattern = os.path.join(output_dir, f"{os.path.basename(base_name)}_page_{{}}.jpg")
+            output_pattern = os.path.join(output_dir, f"{os.path.basename(base_name)}_{{}}.jpg")
         elif os.path.isdir(output_path):
             # If output_path is a directory, use it with default pattern
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-            output_pattern = os.path.join(output_path, f"{base_name}_page_{{}}.jpg")
+            output_pattern = os.path.join(output_path, f"{base_name}_{{}}.jpg")
         else:
             # If output_path contains placeholder, use it as pattern
             if "{}" in output_path:
@@ -57,7 +57,7 @@ def convert(pdf_path: str, output_path: str | None = None, dpi: int = 72, qualit
                 # If it's a file path, extract directory and create pattern
                 output_dir = os.path.dirname(output_path)
                 base_name = os.path.splitext(os.path.basename(output_path))[0]
-                output_pattern = os.path.join(output_dir, f"{base_name}_page_{{}}.jpg")
+                output_pattern = os.path.join(output_dir, f"{base_name}_{{}}.jpg")
 
         # Ensure output directory exists
         output_dir = os.path.dirname(output_pattern.format(1))

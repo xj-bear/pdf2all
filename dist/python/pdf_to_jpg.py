@@ -67,7 +67,7 @@ def convert(pdf_path: str, output_path: str | None = None, dpi: int = 72) -> dic
             if page_count == 1:
                 img_path = os.path.join(output_dir, f"{file_prefix}.jpg")
             else:
-                img_path = os.path.join(output_dir, f"{file_prefix}_page_{i + 1}.jpg")
+                img_path = os.path.join(output_dir, f"{file_prefix}_{i + 1}.jpg")
 
             # Save as JPEG
             pix.save(img_path)
