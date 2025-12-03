@@ -1,17 +1,18 @@
 {
   "name": "pdf2all-mcp",
-  "version": "1.1.0",
-  "description": "pdf2all全能转换器 - A comprehensive MCP server for converting PDF to Excel (OCR supported), Word, PPT, and Images.",
+  "version": "1.1.1",
+  "description": "pdf2all全能转换器 - 一个强大的 MCP 服务器，支持将 PDF 转换为 Word、Excel (带 OCR)、PPT 和图片，并支持云端存储和 URL 处理。",
   "main": "dist/src/index.js",
   "bin": {
-    "pdf2all-mcp": "./dist/src/index.js"
+    "pdf2all-mcp": "dist/src/index.js"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc && xcopy python dist\\python /E /I /Y",
+    "build": "tsc && shx cp -r python dist/python",
     "start": "node dist/src/index.js",
     "start:sse": "node dist/src/index.js --sse",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "postinstall": "pip3 install -r python/requirements.txt --break-system-packages || pip install -r python/requirements.txt || echo 'Warning: Python dependencies installation failed. Please install manually or use Docker.'"
   },
   "keywords": [
     "mcp",
@@ -37,6 +38,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
+    "shx": "^0.4.0",
     "uuid": "^13.0.0",
     "zod": "^3.23.0"
   },
