@@ -3,7 +3,7 @@
     "pdf2all": {
       "command": "node",
       "args": [
-        "G:\\project\\阿里mcp大赛\\pdf2all\\dist\\index.js"
+        "G:\\project\\阿里mcp大赛\\pdf2all\\dist\\src\\index.js"
       ],
       "env": {
         "NODE_ENV": "production"

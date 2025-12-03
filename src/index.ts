@@ -19,6 +19,9 @@ import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
+import AdmZip from "adm-zip";
+import os from "os";
 
 // Get the directory of this script
 const __filename = fileURLToPath(import.meta.url);
@@ -26,6 +29,12 @@ const __dirname = path.dirname(__filename);
 
 // Python converter script path
 const PYTHON_SCRIPT = path.join(__dirname, "..", "python", "converter.py");
+
+// Temporary directory for downloads/uploads
+const TEMP_DIR = path.join(os.tmpdir(), "pdf2all-mcp");
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
 // Tool definitions
 const TOOLS = [
@@ -201,9 +210,34 @@ async function executePythonConverter(
       }
 
       try {
-        const result = JSON.parse(stdout.trim());
+        // Find the last valid JSON object in the output
+        const lines = stdout.trim().split('\n');
+        let jsonStr = "";
+
+        // Strategy 1: Try to parse the last line
+        try {
+          const lastLine = lines[lines.length - 1];
+          JSON.parse(lastLine);
+          jsonStr = lastLine;
+        } catch (e) {
+          // Strategy 2: Scan for JSON object from the end
+          const fullOutput = stdout.trim();
+          const lastBrace = fullOutput.lastIndexOf('}');
+          if (lastBrace !== -1) {
+            const firstBrace = fullOutput.indexOf('{');
+            if (firstBrace !== -1 && firstBrace <= lastBrace) {
+              jsonStr = fullOutput.substring(firstBrace, lastBrace + 1);
+            }
+          }
+        }
+
+        if (!jsonStr) {
+          throw new Error("No JSON found in output");
+        }
+
+        const result = JSON.parse(jsonStr);
         resolve(result);
-      } catch {
+      } catch (e) {
         resolve({
           success: false,
           error: `Failed to parse Python output: ${stdout}`,
@@ -222,9 +256,151 @@ async function executePythonConverter(
   });
 }
 
+/**
+ * Prepare input file from path, URL, or Base64
+ */
+async function prepareInputFile(
+  pdfPath?: string,
+  pdfUrl?: string,
+  pdfBase64?: string
+): Promise<{ path: string; isTemp: boolean }> {
+  if (pdfPath) {
+    return { path: pdfPath, isTemp: false };
+  }
 
+  if (pdfUrl) {
+    const fileName = `${uuidv4()}.pdf`;
+    const tempPath = path.join(TEMP_DIR, fileName);
+    const response = await fetch(pdfUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download PDF from URL: ${response.statusText}`);
+    }
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(tempPath, Buffer.from(buffer));
+    return { path: tempPath, isTemp: true };
+  }
 
-// ... (imports remain the same)
+  if (pdfBase64) {
+    const fileName = `${uuidv4()}.pdf`;
+    const tempPath = path.join(TEMP_DIR, fileName);
+    const buffer = Buffer.from(pdfBase64, "base64");
+    fs.writeFileSync(tempPath, buffer);
+    return { path: tempPath, isTemp: true };
+  }
+
+  throw new Error("One of pdf_path, pdf_url, or pdf_base64 must be provided");
+}
+
+import { uploadToOss, isOssConfigured } from './ossManager.js';
+
+/**
+ * Handle output: return path or Base64 (and Zip for multiple files)
+ * Now supports OSS upload!
+ */
+async function handleOutput(
+  result: { success: boolean;[key: string]: unknown },
+  inputTypeIsTemp: boolean
+): Promise<{ message: string; base64?: string }> {
+  let message = result.message as string;
+  let base64: string | undefined;
+
+  // Check if we should upload to OSS
+  // We upload if OSS is configured AND (input was temp/remote OR user explicitly wants it?)
+  // For now, let's say if OSS is configured, we ALWAYS prefer returning a URL for temp/remote inputs,
+  // to avoid Base64 token limits.
+  // For local inputs, we might still want to return a URL if it's a web-service scenario, 
+  // but usually local users want local files.
+  // User said: "如果直接用mcp返回，token会爆掉" -> implies remote/temp scenario.
+  const useOss = isOssConfigured() && inputTypeIsTemp;
+
+  // Case 1: Multiple files (pdf_to_jpg) -> Zip
+  if (result.output_paths) {
+    const paths = result.output_paths as string[];
+    const zip = new AdmZip();
+
+    // Add files to zip
+    for (const p of paths) {
+      if (fs.existsSync(p)) {
+        zip.addLocalFile(p);
+      }
+    }
+
+    if (inputTypeIsTemp) {
+      // Cleanup temp output files
+      for (const p of paths) {
+        try { fs.unlinkSync(p); } catch (e) { console.error("Failed to delete temp file:", e); }
+      }
+
+      if (useOss) {
+        // Create a temp zip file to upload
+        const tempZipPath = path.join(TEMP_DIR, `${uuidv4()}.zip`);
+        zip.writeZip(tempZipPath);
+
+        const url = await uploadToOss(tempZipPath, "output.zip");
+        if (url) {
+          message += `\n\n[Download Output Zip](${url})`;
+          message += `\n(Note: File may expire based on bucket policy)`;
+        } else {
+          message += `\n\nError: Failed to upload to OSS.`;
+        }
+
+        // Cleanup temp zip
+        try { fs.unlinkSync(tempZipPath); } catch (e) { }
+      } else {
+        // Return Base64 for temp/remote inputs
+        const zipBuffer = zip.toBuffer();
+        base64 = zipBuffer.toString("base64");
+        message += "\n\n[Base64 Zip Data Attached]";
+      }
+    } else {
+      // For local inputs, save Zip to disk
+      const firstFile = paths[0];
+      const outputDir = path.dirname(firstFile);
+      const basename = path.basename(firstFile).replace(/_page_\d+\.jpg$/, "");
+      const zipPath = path.join(outputDir, `${basename}.zip`);
+
+      try {
+        zip.writeZip(zipPath);
+        message += `\n\nOutput Zip: ${zipPath}`;
+      } catch (e: any) {
+        console.error("Failed to create zip:", e);
+        message += `\n\nError creating Zip: ${e.message}`;
+      }
+
+      // Optional: Delete individual files? 
+      // The user complaint "图片没有生成zip" suggests they prefer the zip. 
+      // Let's keep them for safety but emphasize the zip.
+      // Or maybe we should delete them to be cleaner? 
+      // Let's NOT delete them for local files unless explicitly asked, 
+      // but adding the Zip satisfies the "generate zip" requirement.
+    }
+  }
+  // Case 2: Single file
+  else if (result.output_path) {
+    if (inputTypeIsTemp) {
+      const p = result.output_path as string;
+      if (fs.existsSync(p)) {
+        if (useOss) {
+          const url = await uploadToOss(p, path.basename(p));
+          if (url) {
+            message += `\n\n[Download Output File](${url})`;
+            message += `\n(Note: File may expire based on bucket policy)`;
+          } else {
+            message += `\n\nError: Failed to upload to OSS.`;
+          }
+        } else {
+          const buffer = fs.readFileSync(p);
+          base64 = buffer.toString("base64");
+          message += "\n\n[Base64 Data Attached]";
+        }
+        // Clean up output file
+        try { fs.unlinkSync(p); } catch (e) { console.error("Failed to delete temp file:", e); }
+      }
+    }
+  }
+
+  return { message, base64 };
+}
 
 /**
  * Create and configure the MCP server
@@ -244,7 +420,21 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
 
   // Handle tool listing
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: TOOLS };
+    // Update tools schema dynamically to include new fields
+    const updatedTools = TOOLS.map(tool => ({
+      ...tool,
+      inputSchema: {
+        ...tool.inputSchema,
+        properties: {
+          ...tool.inputSchema.properties,
+          pdf_path: { ...tool.inputSchema.properties.pdf_path, description: "Optional: Absolute path to local PDF file" },
+          pdf_url: { type: "string", description: "Optional: URL to download PDF from" },
+          pdf_base64: { type: "string", description: "Optional: Base64 encoded PDF content" }
+        },
+        required: [] // We handle validation manually
+      }
+    }));
+    return { tools: updatedTools };
   });
 
   // Handle tool execution
@@ -255,18 +445,17 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
     const tool = TOOLS.find((t) => t.name === name);
     if (!tool) {
       return {
-        content: [
-          {
-            type: "text",
-            text: `Unknown tool: ${name}. Available tools: ${TOOLS.map((t) => t.name).join(", ")}`,
-          },
-        ],
+        content: [{ type: "text", text: `Unknown tool: ${name}` }],
         isError: true,
       };
     }
 
     // Extract arguments
-    const pdfPath = (args as { pdf_path?: string })?.pdf_path;
+    const pdfPathArg = (args as { pdf_path?: string })?.pdf_path;
+    const pdfUrl = (args as { pdf_url?: string })?.pdf_url;
+    const pdfBase64 = (args as { pdf_base64?: string })?.pdf_base64;
+
+    // ... other args extraction
     const outputPath = (args as { output_path?: string })?.output_path;
     const fastMode = (args as { fast_mode?: boolean })?.fast_mode;
     const dpi = (args as { dpi?: number })?.dpi;
@@ -274,83 +463,103 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
     const pages = (args as { pages?: string })?.pages;
     const useOcr = (args as { use_ocr?: boolean })?.use_ocr;
 
-    if (!pdfPath) {
+    // Manual validation for input source
+    if (!pdfPathArg && !pdfUrl && !pdfBase64) {
       return {
-        content: [
-          {
-            type: "text",
-            text: "Error: pdf_path is required",
-          },
-        ],
+        content: [{ type: "text", text: "Error: One of pdf_path, pdf_url, or pdf_base64 must be provided." }],
+        isError: true,
+      };
+    }
+    if ([pdfPathArg, pdfUrl, pdfBase64].filter(Boolean).length > 1) {
+      return {
+        content: [{ type: "text", text: "Error: Only one of pdf_path, pdf_url, or pdf_base64 can be provided." }],
         isError: true,
       };
     }
 
-    // Execute conversion
-    const result = await executePythonConverter(name, pdfPath, outputPath, fastMode, dpi, quality, pages, useOcr);
+    try {
+      // Prepare input
+      const { path: inputPath, isTemp } = await prepareInputFile(pdfPathArg, pdfUrl, pdfBase64);
 
-    if (result.success) {
-      // Build success message
-      let message = result.message as string;
-      const links: string[] = [];
+      // Execute conversion
+      // Note: If isTemp is true, we might want to ensure output path is also temp if not specified?
+      // The python script defaults to saving alongside input. If input is in temp, output will      // Execute conversion
+      const result = await executePythonConverter(name, inputPath, outputPath, fastMode, dpi, quality, pages, useOcr);
+      console.error("DEBUG: result keys:", Object.keys(result));
+      if (result.output_paths) console.error("DEBUG: output_paths length:", (result.output_paths as any[]).length);
 
-      // Helper to copy file and generate link
-      const processFile = (filePath: string) => {
-        if (baseUrl && publicDir) {
-          try {
-            const fileName = path.basename(filePath);
-            const destPath = path.join(publicDir, fileName);
-            fs.copyFileSync(filePath, destPath);
-            return `${baseUrl}/${fileName}`;
-          } catch (e) {
-            console.error(`Failed to copy file ${filePath} to public dir:`, e);
+      // Clean up input temp file
+      if (isTemp) {
+        try { fs.unlinkSync(inputPath); } catch (e) { console.error("Failed to delete input temp file:", e); }
+      }
+
+      if (result.success) {
+        // Handle output (Base64/Zip logic)
+        const { message, base64 } = await handleOutput(result, isTemp);
+
+        const content: any[] = [{ type: "text", text: message }];
+
+        if (base64) {
+          content.push({
+            type: "text",
+            text: base64
+          });
+        } else {
+          // Existing Link Logic (only if not temp/base64)
+          // Helper to copy file and generate link
+          const processFile = (filePath: string) => {
+            if (baseUrl && publicDir) {
+              try {
+                const fileName = path.basename(filePath);
+                const destPath = path.join(publicDir, fileName);
+                fs.copyFileSync(filePath, destPath);
+                return `${baseUrl}/${fileName}`;
+              } catch (e) {
+                console.error(`Failed to copy file ${filePath} to public dir:`, e);
+                return null;
+              }
+            }
             return null;
+          };
+
+          const links: string[] = [];
+
+          // For pdf_to_jpg, list output files
+          if (name === "pdf_to_jpg" && result.output_paths) {
+            const paths = result.output_paths as string[];
+            content[0].text += `\n\nOutput files:\n${paths.map((p) => `- ${p}`).join("\n")}`;
+
+            if (baseUrl && publicDir) {
+              paths.forEach(p => {
+                const link = processFile(p);
+                if (link) links.push(link);
+              });
+            }
+          } else if (result.output_path) {
+            const p = result.output_path as string;
+            content[0].text += `\n\nOutput file: ${p}`;
+
+            if (baseUrl && publicDir) {
+              const link = processFile(p);
+              if (link) links.push(link);
+            }
+          }
+
+          if (links.length > 0) {
+            content[0].text += `\n\nDownload Links:\n${links.map(l => `- ${l}`).join("\n")}`;
           }
         }
-        return null;
-      };
 
-      // For pdf_to_jpg, list output files
-      if (name === "pdf_to_jpg" && result.output_paths) {
-        const paths = result.output_paths as string[];
-        message += `\n\nOutput files:\n${paths.map((p) => `- ${p}`).join("\n")}`;
-
-        if (baseUrl && publicDir) {
-          paths.forEach(p => {
-            const link = processFile(p);
-            if (link) links.push(link);
-          });
-        }
-      } else if (result.output_path) {
-        const p = result.output_path as string;
-        message += `\n\nOutput file: ${p}`;
-
-        if (baseUrl && publicDir) {
-          const link = processFile(p);
-          if (link) links.push(link);
-        }
+        return { content };
+      } else {
+        return {
+          content: [{ type: "text", text: `Conversion failed: ${result.error}` }],
+          isError: true,
+        };
       }
-
-      if (links.length > 0) {
-        message += `\n\nDownload Links:\n${links.map(l => `- ${l}`).join("\n")}`;
-      }
-
+    } catch (error: any) {
       return {
-        content: [
-          {
-            type: "text",
-            text: message,
-          },
-        ],
-      };
-    } else {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Conversion failed: ${result.error}`,
-          },
-        ],
+        content: [{ type: "text", text: `Error: ${error.message}` }],
         isError: true,
       };
     }

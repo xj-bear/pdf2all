@@ -2,15 +2,15 @@
   "name": "pdf2all-mcp",
   "version": "1.0.0",
   "description": "A comprehensive MCP server for converting PDF to Excel (OCR supported), Word, PPT, and Images.",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "bin": {
-    "pdf2all-mcp": "./dist/index.js"
+    "pdf2all-mcp": "./dist/src/index.js"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "start:sse": "node dist/index.js --sse",
+    "build": "tsc && xcopy python dist\\python /E /I /Y",
+    "start": "node dist/src/index.js",
+    "start:sse": "node dist/src/index.js --sse",
     "dev": "tsc --watch"
   },
   "keywords": [
@@ -29,9 +29,15 @@
     "python"
   ],
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.943.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/uuid": "^10.0.0",
+    "adm-zip": "^0.5.16",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^5.2.1",
+    "uuid": "^13.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
