@@ -22,6 +22,17 @@ import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import AdmZip from "adm-zip";
 import os from "os";
+import dotenv from "dotenv";
+import { uploadToOss, isOssConfigured } from './ossManager.js';
+
+// Load environment variables from multiple sources
+// 1. Current working directory
+dotenv.config();
+// 2. User home directory (~/.pdf2all-mcp/.env)
+const homeConfigPath = path.join(os.homedir(), ".pdf2all-mcp", ".env");
+if (fs.existsSync(homeConfigPath)) {
+  dotenv.config({ path: homeConfigPath });
+}
 
 // Get the directory of this script
 const __filename = fileURLToPath(import.meta.url);
@@ -168,7 +179,8 @@ async function executePythonConverter(
       ...(useOcr !== undefined && action === "pdf_to_excel" && { use_ocr: useOcr }),
     };
 
-    const pythonProcess = spawn("python", [PYTHON_SCRIPT], {
+    const pythonCmd = process.env.PYTHON_PATH || "python";
+    const pythonProcess = spawn(pythonCmd, [PYTHON_SCRIPT], {
       cwd: path.dirname(PYTHON_SCRIPT),
       env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONIOENCODING: "utf-8" } // 确保Python输出不被缓冲且使用UTF-8
     });
@@ -291,7 +303,7 @@ async function prepareInputFile(
   throw new Error("One of pdf_path, pdf_url, or pdf_base64 must be provided");
 }
 
-import { uploadToOss, isOssConfigured } from './ossManager.js';
+
 
 /**
  * Handle output: return path or Base64 (and Zip for multiple files)
@@ -409,7 +421,7 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
   const server = new Server(
     {
       name: "pdf2all-mcp",
-      version: "1.0.0",
+      version: "1.1.0",
     },
     {
       capabilities: {

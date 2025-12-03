@@ -2,9 +2,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import dotenv from 'dotenv';
 // Load environment variables
-dotenv.config();
 let client = null;
 try {
     if (process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY && process.env.S3_ENDPOINT && process.env.S3_BUCKET) {

@@ -1,7 +1,7 @@
 {
   "name": "pdf2all-mcp",
-  "version": "1.0.0",
-  "description": "A comprehensive MCP server for converting PDF to Excel (OCR supported), Word, PPT, and Images.",
+  "version": "1.1.0",
+  "description": "pdf2all全能转换器 - A comprehensive MCP server for converting PDF to Excel (OCR supported), Word, PPT, and Images.",
   "main": "dist/src/index.js",
   "bin": {
     "pdf2all-mcp": "./dist/src/index.js"
