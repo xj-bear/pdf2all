@@ -40,3 +40,9 @@ files/
 test_*.py
 test_*.js
 test_*.ts
+
+# agents
+.agent/
+.claude/
+.mcp/
+.sequential-thinking/

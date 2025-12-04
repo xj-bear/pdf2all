@@ -1,7 +1,7 @@
 services:
   pdf2all:
     # 方式一：使用 Docker 镜像 (推荐)
-    # image: yourusername/pdf2all-mcp:latest
+    # image: xjbear/pdf2all-mcp:latest
     
     # 方式二：从源码构建 (本地开发或私有部署)
     build: .
