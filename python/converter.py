@@ -9,7 +9,17 @@ Usage:
 import sys
 import os
 import json
-from PyPDF2 import PdfReader
+try:
+    from pypdf import PdfReader
+except ImportError:
+    import sys
+    import subprocess
+    print("Debug: sys.path:", sys.path, file=sys.stderr)
+    try:
+        print("Debug: pip freeze:", subprocess.check_output([sys.executable, "-m", "pip", "freeze"]).decode(), file=sys.stderr)
+    except Exception as e:
+        print("Debug: failed to run pip freeze:", e, file=sys.stderr)
+    raise
 
 # Import converter modules
 import pdf_to_docx

@@ -14,6 +14,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
+# Install dependencies (including devDependencies for build)
 RUN npm install
 
 COPY . .
@@ -24,10 +25,13 @@ RUN pip3 install --no-cache-dir -r python/requirements.txt --break-system-packag
 # Build TypeScript
 RUN npm run build
 
-ENV PORT=3000
+# Prune devDependencies to save space
+RUN npm prune --production
+
+ENV PORT=10001
 ENV NODE_ENV=production
 ENV PYTHON_PATH=python3
 
-EXPOSE 3000
+EXPOSE 10001
 
 CMD ["npm", "run", "start:sse"]

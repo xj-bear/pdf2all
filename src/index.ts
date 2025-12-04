@@ -676,7 +676,7 @@ async function main(): Promise<void> {
   // Check for SSE mode
   const args = process.argv.slice(2);
   const isSSE = args.includes("--sse") || process.env.MCP_MODE === "sse";
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 10001;
 
   if (isSSE) {
     const app = express();
