@@ -139,26 +139,80 @@ S3_BUCKET=pdf2all
 PYTHON_PATH=D:\env\python\python.exe
 ```
 
-### 4. Cloud Deployment Guide (Important)
+### 4. Deployment Guide
+This project supports multiple deployment methods. Please choose the one that best fits your environment.
 
-If you are deploying in a cloud environment (e.g., Railway, Zeabur, Alipay Mini Program Cloud), please note:
+#### Method A: Docker Image Deployment (Recommended)
+The simplest and most stable method. Supports all cloud platforms (Railway, Zeabur, Alibaba Cloud, etc.).
 
-*   **Python Environment**: Most Node.js cloud environments **do not include Python**.
-*   **Recommended**: Use **Docker** for deployment. This project includes a `Dockerfile` that automatically installs Node.js 18 + Python 3 + all dependencies.
-*   **Alternative (npx)**: This project includes a `postinstall` script that attempts to run `pip install` automatically in environments that support Python. If deployment fails, please check if Python 3.8+ is installed in the cloud environment.
+1.  **Create `docker-compose.yml`**:
 
-**Docker Deployment Example (docker-compose.yml)**:
+    ```yaml
+    services:
+      pdf2all:
+        # Use official image (replace with your image address or use build: . for local build)
+        # image: yourusername/pdf2all-mcp:latest
+        build: . 
+        container_name: pdf2all-mcp
+        restart: always
+        ports:
+          - "3000:3000"
+        environment:
+          - NODE_ENV=production
+          - PORT=3000
+          # S3 Configuration (Optional, for cloud storage)
+          - S3_ENDPOINT=https://s3.bitiful.net
+          - S3_REGION=auto
+          - S3_ACCESS_KEY_ID=your_access_key
+          - S3_SECRET_ACCESS_KEY=your_secret_key
+          - S3_BUCKET=pdf2all
+    ```
 
-```yaml
-services:
-  pdf2all:
-    build: .
-    environment:
-      - S3_ENDPOINT=...
-      - S3_ACCESS_KEY_ID=...
-      - S3_SECRET_ACCESS_KEY=...
-      - S3_BUCKET=...
+2.  **Start Service**:
+    ```bash
+    docker-compose up -d
+    ```
+
+#### Method B: Source Deployment (Git)
+Suitable for 1Panel, Baota Panel, or manual deployment.
+
+1.  **Clone Repository**:
+    ```bash
+    git clone https://github.com/yourusername/pdf2all-mcp.git
+    cd pdf2all-mcp
+    ```
+
+2.  **Start (using Docker)**:
+    Use the included `docker-compose.yml`:
+    ```bash
+    docker-compose up -d --build
+    ```
+
+3.  **Start (without Docker)**:
+    *Requires Node.js 18+ and Python 3.8+ installed on the system*
+    ```bash
+    npm install
+    npm run build
+    npm start
+    ```
+
+#### Method C: npx One-Click Run (Local/Lightweight)
+Suitable for local testing or simple Node.js environments.
+
+```bash
+npx -y pdf2all-mcp
 ```
+*Note: This method may fail in cloud environments that do not include Python.*
+
+### 5. Automated Build (GitHub Actions)
+This project includes GitHub Actions configuration (`.github/workflows/docker-publish.yml`).
+Simply push your code to GitHub, and it will automatically build the Docker image and push it to Docker Hub.
+
+**Configuration Steps**:
+1.  In your GitHub repository, go to **Settings** -> **Secrets and variables** -> **Actions** and add:
+    *   `DOCKER_USERNAME`: Your Docker Hub username
+    *   `DOCKER_PASSWORD`: Your Docker Hub Access Token
+2.  Push to the `main` branch, and GitHub Actions will run automatically.
 
 ## 🛠️ Dependencies
 

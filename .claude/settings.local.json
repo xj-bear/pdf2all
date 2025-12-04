@@ -21,7 +21,13 @@
       "Skill(pdf2img)",
       "WebFetch(domain:img.gpt.edu.bi)",
       "Bash(curl:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npm pkg fix)",
+      "Bash(npm version patch)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm version:*)",
+      "Bash(npm publish)"
     ],
     "deny": [],
     "ask": []

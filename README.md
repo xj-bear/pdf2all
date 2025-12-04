@@ -1,4 +1,4 @@
-# pdf2all全能转换器 (v1.1)
+# pdf2all全能转换器 (v1.1.4)
 
 这是一个功能强大的 MCP (Model Context Protocol) 服务器，提供全能的 PDF 转换工具。支持将 PDF 转换为 Word、Excel、PPT 和 JPG 图片。
 
@@ -138,6 +138,86 @@ S3_SECRET_ACCESS_KEY=xxx
 S3_BUCKET=pdf2all
 PYTHON_PATH=D:\env\python\python.exe
 ```
+
+### 4. 部署指南 (Deployment Guide)
+
+本项目支持多种部署方式，请根据您的环境选择最合适的一种。
+
+#### 方式 A: Docker 镜像部署 (推荐)
+
+最简单、最稳定的部署方式。支持所有云平台 (Railway, Zeabur, 阿里云等)。
+
+1.  **创建 `docker-compose.yml` 文件**:
+
+    ```yaml
+    services:
+      pdf2all:
+        # 使用官方镜像 (请替换为您构建的镜像地址，或使用 build: . 本地构建)
+        # image: yourusername/pdf2all-mcp:latest
+        build: . 
+        container_name: pdf2all-mcp
+        restart: always
+        ports:
+          - "3000:3000"
+        environment:
+          - NODE_ENV=production
+          - PORT=3000
+          # S3 配置 (可选，用于云端存储)
+          - S3_ENDPOINT=https://s3.bitiful.net
+          - S3_REGION=auto
+          - S3_ACCESS_KEY_ID=your_access_key
+          - S3_SECRET_ACCESS_KEY=your_secret_key
+          - S3_BUCKET=pdf2all
+    ```
+
+2.  **启动服务**:
+    ```bash
+    docker-compose up -d
+    ```
+
+#### 方式 B: 源码部署 (Git)
+
+适用于 1Panel、宝塔面板或手动部署。
+
+1.  **克隆仓库**:
+    ```bash
+    git clone https://github.com/yourusername/pdf2all-mcp.git
+    cd pdf2all-mcp
+    ```
+
+2.  **启动 (使用 Docker)**:
+    直接使用项目自带的 `docker-compose.yml`：
+    ```bash
+    docker-compose up -d --build
+    ```
+
+3.  **启动 (不使用 Docker)**:
+    *需确保系统已安装 Node.js 18+ 和 Python 3.8+*
+    ```bash
+    npm install
+    npm run build
+    npm start
+    ```
+
+#### 方式 C: npx 一键运行 (本地/轻量级)
+
+适用于本地快速测试或支持 Node.js 的简单环境。
+
+```bash
+npx -y pdf2all-mcp
+```
+*注意：此方式在不含 Python 的云环境中可能会失败。*
+
+### 5. 自动化构建 (GitHub Actions)
+
+本项目已包含 GitHub Actions 配置 (`.github/workflows/docker-publish.yml`)。
+只要将代码推送到 GitHub，它就会自动构建 Docker 镜像并推送到 Docker Hub。
+
+**配置步骤**:
+1.  在 GitHub 仓库的 **Settings** -> **Secrets and variables** -> **Actions** 中添加：
+    *   `DOCKER_USERNAME`: 您的 Docker Hub 用户名
+    *   `DOCKER_PASSWORD`: 您的 Docker Hub 访问令牌 (Access Token)
+2.  推送到 `main` 分支，GitHub Actions 会自动运行。
 
 ## 🛠️ 依赖要求
 

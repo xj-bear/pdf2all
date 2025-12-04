@@ -1,6 +1,6 @@
 {
   "name": "pdf2all-mcp",
-  "version": "1.1.1",
+  "version": "1.1.4",
   "description": "pdf2all全能转换器 - 一个强大的 MCP 服务器，支持将 PDF 转换为 Word、Excel (带 OCR)、PPT 和图片，并支持云端存储和 URL 处理。",
   "main": "dist/src/index.js",
   "bin": {

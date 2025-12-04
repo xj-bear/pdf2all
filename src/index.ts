@@ -206,17 +206,23 @@ async function executePythonConverter(
       stdout += data.toString();
     });
 
-    // Ignore stderr - libraries like pdf2docx output INFO logs there
-    pythonProcess.stderr.on("data", () => { });
+    let stderr = "";
+
+    // Capture stderr for debugging
+    pythonProcess.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
 
     pythonProcess.on("close", (code) => {
       clearTimeout(timeout);
       if (timedOut) return;
 
       if (code !== 0) {
+        console.error(`Python process exited with code ${code}`);
+        console.error("Stderr:", stderr);
         resolve({
           success: false,
-          error: `Python process exited with code ${code}`,
+          error: `Python process exited with code ${code}. Error details: ${stderr.trim() || "No error output captured."}`,
         });
         return;
       }
@@ -494,7 +500,7 @@ function createServer(baseUrl?: string, publicDir?: string): Server {
   const server = new Server(
     {
       name: "pdf2all-mcp",
-      version: "1.1.0",
+      version: "1.1.4",
     },
     {
       capabilities: {
@@ -691,29 +697,41 @@ async function main(): Promise<void> {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req, res) => {
-      console.log("New SSE connection");
+      console.log("New SSE connection established");
       const transport = new SSEServerTransport("/messages", res);
       const sessionId = transport.sessionId;
-      console.log("Session ID:", sessionId);
+      console.log("Session ID created:", sessionId);
       transports.set(sessionId, transport);
 
       await server.connect(transport);
 
       // Clean up on close
       req.on("close", () => {
-        console.log("SSE connection closed:", sessionId);
+        console.log("SSE connection closed for session:", sessionId);
         transports.delete(sessionId);
-        server.close();
+        // Do not close the server here, as it might be shared or reused? 
+        // Actually, for MCP, one server instance per connection is typical logic in simple implementations,
+        // but here we are reusing the 'server' object. 
+        // If we close 'server', it might affect other connections if 'server' maintains global state.
+        // But 'server' from @modelcontextprotocol/sdk might be stateful per connection?
+        // Let's create a NEW server instance per connection to be safe and isolated.
       });
     });
 
     app.post("/messages", async (req, res) => {
       const sessionId = req.query.sessionId as string;
-      console.log("Received message for session:", sessionId);
+      console.log(`Received POST message for session: ${sessionId}`);
+
+      if (!sessionId) {
+        console.error("Missing sessionId in query parameters");
+        res.status(400).send("Missing sessionId");
+        return;
+      }
+
       const transport = transports.get(sessionId);
 
       if (!transport) {
-        console.log("Session not found in transports map. Available sessions:", [...transports.keys()]);
+        console.error(`Session not found: ${sessionId}. Available: ${[...transports.keys()].join(", ")}`);
         res.status(404).send("Session not found");
         return;
       }
@@ -721,8 +739,9 @@ async function main(): Promise<void> {
       await transport.handlePostMessage(req, res);
     });
 
-    app.listen(port, () => {
-      console.error(`PDF2All MCP Server running on SSE mode at http://localhost:${port}/sse`);
+    // Listen on 0.0.0.0 to accept external connections in cloud environments
+    app.listen(Number(port), "0.0.0.0", () => {
+      console.error(`PDF2All MCP Server running on SSE mode at http://0.0.0.0:${port}/sse`);
     });
   } else {
     const server = createServer();
