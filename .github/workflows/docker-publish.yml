@@ -11,8 +11,8 @@ on:
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: docker.io
-  # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}
+  # Use the username from secrets to ensure it matches the login
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/pdf2all
 
 
 jobs:
