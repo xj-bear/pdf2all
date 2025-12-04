@@ -22,8 +22,7 @@ COPY . .
 RUN pip3 install --no-cache-dir -r python/requirements.txt --break-system-packages
 
 # Build TypeScript
-# Note: We run tsc directly and copy python files manually to avoid Windows-specific 'xcopy' in package.json
-RUN npx tsc && cp -r python dist/python
+RUN npm run build
 
 ENV PORT=3000
 ENV NODE_ENV=production
