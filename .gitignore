@@ -35,8 +35,10 @@ tmp/
 temp/
 uploads/
 files/
+*.tgz
 
 # Test files
+test/
 test_*.py
 test_*.js
 test_*.ts

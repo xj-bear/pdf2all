@@ -1,6 +1,12 @@
 # Use Node.js 18 as the base image
 FROM node:18-slim
 
+# Replace apt sources with Aliyun mirror for China
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true && \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
+
 # Install Python 3, pip, and system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -14,13 +20,13 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# Install dependencies (including devDependencies for build)
-RUN npm install
+# Install dependencies (using Taobao mirror)
+RUN npm config set registry https://registry.npmmirror.com && npm install
 
 COPY . .
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir -r python/requirements.txt --break-system-packages
+# Install Python dependencies (using Aliyun mirror)
+RUN pip3 install --no-cache-dir -r python/requirements.txt --break-system-packages -i https://mirrors.aliyun.com/pypi/simple/
 
 # Build TypeScript
 RUN npm run build
